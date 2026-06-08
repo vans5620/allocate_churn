@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Allocate Churn Tracker</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root{--navy:#0B1F3A;--navy2:#16304f;--gold:#C9A24B;--ink:#1c2733;--muted:#6b7787;--line:#e6e9ef;--bg:#f5f6f8;--card:#fff;}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',-apple-system,Roboto,sans-serif;background:var(--bg);color:var(--ink);line-height:1.45}
+.wrap{max-width:1200px;margin:0 auto;padding:0 20px 60px}
+header{background:linear-gradient(135deg,var(--navy),var(--navy2));color:#fff;padding:30px 0 0;border-bottom:3px solid var(--gold)}
+header .top{display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:14px;padding-bottom:18px}
+header h1{font-size:24px;font-weight:600;letter-spacing:.3px}
+header .scheme{color:var(--gold);font-weight:700}
+header .sub{color:#b9c4d4;font-size:13px;margin-top:6px}
+.badge{background:rgba(201,162,75,.15);border:1px solid var(--gold);color:var(--gold);padding:6px 14px;border-radius:20px;font-size:12px;font-weight:600}
+.tabs{display:flex;gap:4px}
+.tab{background:rgba(255,255,255,.06);color:#b9c4d4;border:none;border-radius:8px 8px 0 0;padding:11px 26px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;transition:.15s}
+.tab:hover{background:rgba(255,255,255,.12);color:#fff}
+.tab.active{background:var(--bg);color:var(--navy)}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:14px;margin:26px 0}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 20px;box-shadow:0 1px 3px rgba(16,30,54,.05)}
+.kpi .lab{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);font-weight:600}
+.kpi .val{font-size:24px;font-weight:700;color:var(--navy);margin-top:6px}
+.kpi .val small{font-size:13px;color:var(--muted);font-weight:500}
+.kpi.hl{background:linear-gradient(135deg,var(--navy),var(--navy2));border:none}
+.kpi.hl .lab{color:var(--gold)}.kpi.hl .val{color:#fff}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px 22px;box-shadow:0 1px 3px rgba(16,30,54,.05);margin-bottom:18px}
+.card.full{grid-column:1/-1}
+.card h2{font-size:15px;font-weight:600;color:var(--navy);margin-bottom:4px}
+.card .desc{font-size:12px;color:var(--muted);margin-bottom:16px}
+.chartbox{position:relative;height:320px}.chartbox.tall{height:390px}
+table{width:100%;border-collapse:collapse;font-size:13px;margin-top:8px}
+th,td{padding:9px 10px;text-align:right;border-bottom:1px solid var(--line)}
+th{background:#fafbfc;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.4px;font-weight:600}
+th:first-child,td:first-child{text-align:left}
+tr:hover td{background:#fafbfc}
+tfoot td{font-weight:700;color:var(--navy);border-top:2px solid var(--navy);background:#fafbfc}
+.dot{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:7px;vertical-align:middle}
+.bar{height:7px;border-radius:4px;display:inline-block;vertical-align:middle;margin-left:8px}
+.note{font-size:11.5px;color:var(--muted);margin-top:14px;padding:12px 14px;background:#fafbfc;border-left:3px solid var(--gold);border-radius:0 6px 6px 0}
+.note b{color:var(--navy)}
+footer{text-align:center;color:var(--muted);font-size:12px;margin-top:30px}
+@media(max-width:820px){.grid{grid-template-columns:1fr}}
+</style></head><body>
+<header><div class="wrap">
+<div class="top"><div><h1>Allocate Churn Tracker &mdash; <span class="scheme" id="hScheme"></span></h1>
+<div class="sub" id="hSub"></div></div>
+<div class="badge" id="hBadge"></div></div>
+<div class="tabs" id="tabs"></div>
+</div></header>
+<div class="wrap">
+<div class="kpis" id="kpis"></div>
+<div class="card full"><h2>Cumulative Churn by Asset Class</h2>
+<div class="desc">Since-inception turnover = min(total buy, total sell) / period Avg AUM, per asset class.</div>
+<div class="chartbox"><canvas id="cumBar"></canvas></div></div>
+<div class="card full"><h2>Monthly Churn Trend</h2>
+<div class="desc">Monthly churn = min(month buy, month sell) / month Avg AUM, stacked by asset class. Line = running cumulative of monthly churn.</div>
+<div class="chartbox tall"><canvas id="monthly"></canvas></div></div>
+<div class="grid">
+<div class="card"><h2>Monthly Buy vs Sell Flows</h2><div class="desc">Gross flows in &#8377; Cr (sells already net of excluded classes).</div>
+<div class="chartbox"><canvas id="flows"></canvas></div></div>
+<div class="card"><h2>Monthly Average AUM</h2><div class="desc">Mean daily AUM per month (&#8377; Cr) &mdash; the monthly churn denominator.</div>
+<div class="chartbox"><canvas id="aum"></canvas></div></div>
+</div>
+<div class="card full"><h2>Churn Detail by Asset Class</h2>
+<div class="desc">Cumulative since-inception. Churn = min(buy,sell) / period Avg AUM.</div>
+<table id="tbl"><thead><tr><th>Asset Class</th><th>Total Buy (&#8377; Cr)</th><th>Total Sell (&#8377; Cr)</th><th>Churn %</th><th>Share of churn</th></tr></thead>
+<tbody></tbody><tfoot></tfoot></table>
+<div class="note" id="note"></div></div>
+<footer>Ionic Allocate &middot; Churn Tracker &middot; Generated <span id="gen"></span></footer>
+</div>
+<script>
+const SCHEMES = [{"scheme": "Aggressive", "has_aum": true, "period": "2025-03 to 2026-05", "avg_aum_cr": 43.53, "n_months": 15, "total_churn": 58.58, "monthly_cum_churn": 37.53, "total_buy_cr": 150.73, "total_sell_cr": 25.5, "months": ["2025-03", "2025-04", "2025-05", "2025-06", "2025-07", "2025-08", "2025-09", "2025-10", "2025-11", "2025-12", "2026-01", "2026-02", "2026-03", "2026-04", "2026-05"], "assets": ["International", "Comm FoF", "Bonds", "Comm ETF", "InVIT", "ESS", "Equity MF", "Equity ETF", "Listed Shares"], "colors": ["#C9A24B", "#1F4E79", "#2E8B8B", "#A6453B", "#6B8E4E", "#7A5C9E", "#4A6FA5", "#B07A3C", "#5B8C5A"], "cum_rows": [["Listed Shares", 29.73, 11.67, 26.8], ["Equity MF", 56.13, 8.59, 19.73], ["Comm FoF", 5.68, 2.98, 6.84], ["Equity ETF", 16.8, 2.09, 4.81], ["Comm ETF", 7.99, 0.18, 0.41], ["International", 23.62, 0.0, 0.0], ["Bonds", 1.74, 0.0, 0.0], ["InVIT", 6.72, 0.0, 0.0], ["ESS", 2.33, 0.0, 0.0]], "monthly_churn": [[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.5780337344384935, 0.0, 0.0, 1.2271536965828511, 0.05752619649877179, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.13616520755987696], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 3.5204530621592935, 4.095668005071833, 0.0, 7.3342256861852055, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0, 0.002288469660909109, 0.0, 0.0, 0.0, 0.7528734614417563, 0.0, 0.0, 0.0, 0.38478939900677644, 0.0, 1.1339649701286862], [0.0, 0.0, 0.0, 0.616907236247973, 0.8641890148732321, 0.5662385449154896, 1.1842452027212327, 0.5392945294369972, 1.7784007397882475, 5.817482232617941, 0.02208201601021589, 0.8914029205976984, 1.3526705932054495, 1.431153445672058, 3.2399157290141605]], "monthly_buy": [1.15, 1.11, 1.7, 3.39, 4.14, 2.24, 3.24, 7.97, 13.58, 17.78, 9.72, 22.74, 18.02, 17.54, 26.41], "monthly_sell": [0.0, 0.0, 0.0, 0.05, 0.1, 0.08, 0.2, 0.26, 2.19, 4.86, 2.82, 5.99, 1.51, 1.54, 5.92], "cum_curve": [0.0, 0.0, 0.0, 0.62, 1.48, 2.05, 3.23, 4.35, 10.4, 20.32, 21.57, 29.85, 31.59, 33.02, 37.53], "monthly_avg_aum_cr": [1.87, 2.72, 3.79, 8.2, 11.14, 13.54, 16.98, 23.18, 36.13, 49.04, 59.0, 72.36, 86.63, 107.59, 131.22]}, {"scheme": "Moderate", "has_aum": true, "period": "2025-04 to 2026-05", "avg_aum_cr": 15.57, "n_months": 14, "total_churn": 30.88, "monthly_cum_churn": 25.3, "total_buy_cr": 68.4, "total_sell_cr": 4.81, "months": ["2025-04", "2025-05", "2025-06", "2025-07", "2025-08", "2025-09", "2025-10", "2025-11", "2025-12", "2026-01", "2026-02", "2026-03", "2026-04", "2026-05"], "assets": ["International Fund", "Gold + Silver Fund", "Bonds", "Gold ETF", "InVIT", "Liquid Fund", "Debt Fund", "Equity MF", "Equity ETF", "Listed Shares", "Liquid ETF"], "colors": ["#C9A24B", "#1F4E79", "#2E8B8B", "#A6453B", "#6B8E4E", "#7A5C9E", "#4A6FA5", "#B07A3C", "#5B8C5A", "#8C5B7A", "#3F7C77"], "cum_rows": [["Listed Shares", 6.76, 1.69, 10.87], ["Equity MF", 15.67, 1.37, 8.83], ["Gold + Silver Fund", 3.02, 1.36, 8.76], ["Equity ETF", 4.04, 0.38, 2.42], ["International Fund", 6.15, 0.0, 0.0], ["Bonds", 3.76, 0.0, 0.0], ["Gold ETF", 6.96, 0.0, 0.0], ["InVIT", 7.97, 0.0, 0.0], ["Liquid Fund", 0.95, 0.0, 0.0], ["Debt Fund", 4.71, 0.0, 0.0], ["Liquid ETF", 8.42, 0.0, 0.0]], "monthly_churn": [[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0872764630561838, 0.0, 0.0, 6.424121908106864, 0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 3.1062936996962662, 0.0, 4.721344086859021, 0.0, 0.001376432201082967, 0.0], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.26685601832713185, 0.0, 0.0, 0.0, 0.0, 0.0, 0.6597342732686984], [0.0, 0.0, 0.2239468970330631, 0.6397808085173536, 0.3505363050634751, 0.6449506283885308, 0.2969355490486842, 0.7463261856260921, 3.750529351264102, 0.02440266894969799, 0.004763926446816602, 0.0, 0.8979199484239678, 1.449755521223175], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]], "monthly_buy": [0.83, 0.66, 1.04, 2.04, 1.01, 1.87, 1.31, 0.75, 2.94, 5.87, 11.77, 13.1, 12.1, 13.13], "monthly_sell": [0.0, 0.0, 0.0, 0.02, 0.02, 0.04, 0.11, 0.09, 0.67, 1.28, 1.07, 0.0, 0.38, 1.13], "cum_curve": [0.0, 0.0, 0.22, 0.86, 1.21, 1.86, 3.24, 4.26, 11.11, 17.56, 22.29, 22.29, 23.19, 25.3], "monthly_avg_aum_cr": [0.86, 1.19, 1.87, 3.34, 4.49, 5.87, 7.84, 8.43, 9.72, 15.13, 22.71, 33.03, 42.37, 53.65]}, {"scheme": "Equity", "has_aum": true, "period": "2025-03 to 2026-05", "avg_aum_cr": 35.73, "n_months": 15, "total_churn": 30.89, "monthly_cum_churn": 12.21, "total_buy_cr": 61.42, "total_sell_cr": 11.04, "months": ["2025-03", "2025-04", "2025-05", "2025-06", "2025-07", "2025-08", "2025-09", "2025-10", "2025-11", "2025-12", "2026-01", "2026-02", "2026-03", "2026-04", "2026-05"], "assets": ["Equity ETF", "Equity MF", "International Fund"], "colors": ["#C9A24B", "#1F4E79", "#2E8B8B"], "cum_rows": [["Equity MF", 42.84, 10.99, 30.74], ["Equity ETF", 6.73, 0.05, 0.15], ["International Fund", 11.85, 0.0, 0.0]], "monthly_churn": [[0.0, 0.0, 0.05792668116072592, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.07099017606087146, 0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 0.14656946768022472, 0.0, 0.0, 0.0, 0.0, 0.0, 1.2060308388083432, 6.783821295105144, 0.6921127194057463, 3.0132578816791473, 0.0, 0.23999628100486123, 0.0], [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]], "monthly_buy": [0.39, 2.69, 3.79, 8.53, 10.69, 9.64, 5.57, 1.38, 3.87, 6.12, 1.27, 5.13, 1.56, 0.65, 0.14], "monthly_sell": [0.0, 0.0, 0.02, 0.0, 0.0, 0.0, 0.0, 0.0, 2.31, 3.35, 0.39, 4.84, 0.0, 0.14, 0.0], "cum_curve": [0.0, 0.0, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 1.41, 8.19, 8.96, 11.97, 11.97, 12.21, 12.21], "monthly_avg_aum_cr": [0.83, 3.1, 8.56, 14.66, 25.11, 36.98, 43.47, 45.9, 47.08, 49.33, 50.71, 51.65, 50.34, 52.93, 55.36]}];
+const INR = n => n.toLocaleString('en-IN',{maximumFractionDigits:2});
+const gold='#C9A24B',navy='#1F4E79';
+Chart.defaults.font.family="'Segoe UI',sans-serif";Chart.defaults.font.size=11;Chart.defaults.color='#6b7787';
+gen.textContent=new Date().toLocaleDateString('en-IN');
+let charts=[]; let active=0;
+
+// tabs
+document.getElementById('tabs').innerHTML=SCHEMES.map((p,i)=>`<button class="tab" data-i="${i}">${p.scheme}</button>`).join('');
+document.querySelectorAll('.tab').forEach(b=>b.onclick=()=>render(+b.dataset.i));
+
+function render(i){
+ active=i; const D=SCHEMES[i];
+ document.querySelectorAll('.tab').forEach((b,j)=>b.classList.toggle('active',j===i));
+ hScheme.textContent=D.scheme;
+ hSub.textContent=`Period ${D.period} · ${D.n_months} months · Avg AUM ₹${INR(D.avg_aum_cr)} Cr`;
+ hBadge.textContent=D.has_aum?`Since-inception churn ${D.total_churn}%`:'Turnover only · AUM pending';
+ const kpis=[{l:'Churn (since inception)',v:D.has_aum?D.total_churn+'%':'—',hl:1},
+  {l:'Cumulative of monthly',v:D.has_aum?D.monthly_cum_churn+'%':'—'},
+  {l:'Total Sell',v:'₹'+INR(D.total_sell_cr)+' <small>Cr</small>'},
+  {l:'Total Buy',v:'₹'+INR(D.total_buy_cr)+' <small>Cr</small>'},
+  {l:'Avg AUM',v:'₹'+INR(D.avg_aum_cr)+' <small>Cr</small>'},
+  {l:'Window',v:D.n_months+' <small>months</small>'}];
+ document.getElementById('kpis').innerHTML=kpis.map(k=>`<div class="kpi ${k.hl?'hl':''}"><div class="lab">${k.l}</div><div class="val">${k.v}</div></div>`).join('');
+ charts.forEach(c=>c.destroy()); charts=[];
+ charts.push(new Chart(cumBar,{type:'bar',data:{labels:D.cum_rows.map(r=>r[0]),datasets:[{label:'Churn %',data:D.cum_rows.map(r=>r[3]),backgroundColor:D.cum_rows.map(r=>D.colors[D.assets.indexOf(r[0])]||gold),borderRadius:5}]},
+  options:{indexAxis:'y',plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>' '+c.parsed.x+'%'}}},scales:{x:{ticks:{callback:v=>v+'%'},grid:{color:'#eef1f5'}},y:{grid:{display:false}}}}}));
+ const stacks=D.assets.map((s,k)=>({type:'bar',label:s,data:D.monthly_churn[k],backgroundColor:D.colors[k],stack:'c'}));
+ charts.push(new Chart(monthly,{data:{labels:D.months,datasets:[...stacks,{type:'line',label:'Cumulative (sum of monthly)',data:D.cum_curve,borderColor:navy,borderWidth:2.5,pointRadius:2,yAxisID:'y1',tension:.25,fill:false}]},
+  options:{plugins:{legend:{position:'bottom',labels:{boxWidth:10,padding:8,font:{size:10}}},tooltip:{callbacks:{label:c=>` ${c.dataset.label}: ${(+c.parsed.y).toFixed(2)}%`}}},scales:{x:{stacked:true,grid:{display:false}},y:{stacked:true,title:{display:true,text:'Monthly churn %'},ticks:{callback:v=>v+'%'},grid:{color:'#eef1f5'}},y1:{position:'right',title:{display:true,text:'Cumulative %'},grid:{display:false},ticks:{callback:v=>v+'%'}}}}}));
+ charts.push(new Chart(flows,{type:'bar',data:{labels:D.months,datasets:[{label:'Buy',data:D.monthly_buy,backgroundColor:navy,borderRadius:3},{label:'Sell',data:D.monthly_sell,backgroundColor:gold,borderRadius:3}]},
+  options:{plugins:{legend:{position:'bottom',labels:{boxWidth:10}},tooltip:{callbacks:{label:c=>` ${c.dataset.label}: ₹${INR(c.parsed.y)} Cr`}}},scales:{x:{grid:{display:false}},y:{title:{display:true,text:'₹ Cr'},grid:{color:'#eef1f5'}}}}}));
+ charts.push(new Chart(aum,{type:'line',data:{labels:D.months,datasets:[{label:'Monthly Avg AUM',data:D.monthly_avg_aum_cr,borderColor:gold,backgroundColor:'rgba(201,162,75,.12)',fill:true,tension:.3,pointRadius:2,borderWidth:2.5}]},
+  options:{plugins:{legend:{display:false},tooltip:{callbacks:{label:c=>' ₹'+INR(c.parsed.y)+' Cr'}}},scales:{x:{grid:{display:false}},y:{title:{display:true,text:'₹ Cr'},grid:{color:'#eef1f5'}}}}}));
+ const maxCh=Math.max(...D.cum_rows.map(r=>r[3]),0.0001),totCh=D.cum_rows.reduce((a,r)=>a+r[3],0);
+ document.querySelector('#tbl tbody').innerHTML=D.cum_rows.map(r=>{const col=D.colors[D.assets.indexOf(r[0])]||gold;const share=totCh?(r[3]/totCh*100):0;
+  return `<tr><td><span class="dot" style="background:${col}"></span>${r[0]}</td><td>${INR(r[1])}</td><td>${INR(r[2])}</td><td><b>${r[3].toFixed(2)}%</b></td><td>${share.toFixed(1)}% <span class="bar" style="width:${(r[3]/maxCh*70).toFixed(0)}px;background:${col}"></span></td></tr>`;}).join('');
+ document.querySelector('#tbl tfoot').innerHTML=`<tr><td>Portfolio Total</td><td>${INR(D.total_buy_cr)}</td><td>${INR(D.total_sell_cr)}</td><td>${D.total_churn}%</td><td>100%</td></tr>`;
+ document.getElementById('note').innerHTML=`<b>Methodology.</b> Churn = min(buy, sell) ÷ AUM. <b>Since-inception</b> churn (headline) uses total buy/sell over period Avg AUM (₹${INR(D.avg_aum_cr)} Cr). <b>Monthly</b> churn uses each month's buy/sell over that month's average AUM (mean daily AUM), so monthly figures fall as AUM grows and need not sum to the headline. <b>Exclusions:</b> sells ignored for International, ESS, Bonds and any Liquid fund/ETF; 'Security in' transfers excluded entirely. Net-inflow book, so the sell leg is binding in every counted class.`;
+}
+render(0);
+</script></body></html>
